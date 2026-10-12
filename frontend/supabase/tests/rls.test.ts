@@ -133,6 +133,21 @@ describe('leo thang đặc quyền trên profiles', () => {
     });
 });
 
+describe('danh bạ thành viên', () => {
+    it('member thấy danh sách nhưng không thấy email', async () => {
+        const rows = await as(db, M(), q => q(`SELECT * FROM list_members()`));
+        expect(rows.length).toBeGreaterThanOrEqual(4);
+        expect(rows.every(r => r.email === null)).toBe(true);
+    });
+    it('admin thấy email', async () => {
+        const rows = await as(db, A(), q => q(`SELECT email FROM list_members()`));
+        expect(rows.some(r => r.email === 'member@example.com')).toBe(true);
+    });
+    it('khách không gọi được', async () => {
+        await expect(as(db, 'anon', q => q(`SELECT * FROM list_members()`))).rejects.toThrow();
+    });
+});
+
 describe('hiển thị people_view theo vai trò', () => {
     it('khách không đọc được bảng gốc people / people_private', async () => {
         await expect(as(db, 'anon', q => q(`SELECT * FROM people`))).rejects.toThrow();

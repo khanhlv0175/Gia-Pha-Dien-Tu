@@ -222,6 +222,23 @@ BEGIN
 END;
 $$;
 
+-- ── RPC: danh bạ thành viên ────────────────────────────────
+-- Cho mọi người dùng đã đăng nhập xem danh sách thành viên mà KHÔNG lộ email
+-- (profiles bị khóa theo từng người). Email chỉ trả về cho admin.
+CREATE FUNCTION list_members()
+RETURNS TABLE (
+    id UUID, display_name TEXT, avatar_url TEXT, role TEXT,
+    person_handle TEXT, email TEXT, created_at TIMESTAMPTZ
+)
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
+    SELECT p.id, p.display_name, p.avatar_url, p.role, p.person_handle,
+           CASE WHEN is_admin() THEN p.email END,
+           p.created_at
+      FROM profiles p
+     WHERE is_user()
+     ORDER BY p.created_at
+$$;
+
 -- ── Quyền ở mức bảng ───────────────────────────────────────
 -- Thu hồi mặc định rộng của Supabase cho `anon`, rồi cấp lại đúng thứ cần.
 REVOKE ALL ON ALL TABLES IN SCHEMA public FROM anon;
@@ -231,3 +248,5 @@ GRANT SELECT ON people_view TO authenticated;
 REVOKE EXECUTE ON FUNCTION review_contribution(UUID, BOOLEAN, TEXT) FROM PUBLIC, anon;
 GRANT  EXECUTE ON FUNCTION review_contribution(UUID, BOOLEAN, TEXT) TO authenticated;
 GRANT  EXECUTE ON FUNCTION validate_invite_code(TEXT) TO anon, authenticated;
+REVOKE EXECUTE ON FUNCTION list_members() FROM PUBLIC, anon;
+GRANT  EXECUTE ON FUNCTION list_members() TO authenticated;

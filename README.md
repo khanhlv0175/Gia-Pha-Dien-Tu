@@ -125,7 +125,7 @@ Gia-Pha-Dien-Tu/
 ## 🚀 Cài đặt & chạy local
 
 ### Yêu cầu
-- **Node.js** ≥ 18
+- **Node.js** ≥ 24 (xem `frontend/.nvmrc`)
 - Tài khoản **Supabase** (free tier OK)
 
 ### Setup

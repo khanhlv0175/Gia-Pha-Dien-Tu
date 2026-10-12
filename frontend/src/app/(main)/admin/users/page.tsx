@@ -34,10 +34,8 @@ import { supabase } from '@/lib/supabase';
 
 const ROLE_COLORS: Record<string, string> = {
     admin: 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300',
-    editor: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300',
-    archivist: 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-300',
     member: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300',
-    guest: 'bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-300',
+    viewer: 'bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-300',
 };
 
 interface ProfileUser {
@@ -45,7 +43,6 @@ interface ProfileUser {
     email: string;
     display_name: string | null;
     role: string;
-    status: string;
     created_at: string;
 }
 
@@ -139,21 +136,11 @@ export default function AdminUsersPage() {
             .from('profiles')
             .update({ role: newRole })
             .eq('id', userId);
-        if (!error) {
-            setUsers(prev => prev.map(u => u.id === userId ? { ...u, role: newRole } : u));
+        if (error) {
+            window.alert(error.message.includes('LAST_ADMIN') ? 'Không thể hạ quyền admin cuối cùng.' : error.message);
+            return;
         }
-    }, []);
-
-    // Suspend / reactivate user
-    const handleToggleStatus = useCallback(async (userId: string, currentStatus: string) => {
-        const newStatus = currentStatus === 'active' ? 'suspended' : 'active';
-        const { error } = await supabase
-            .from('profiles')
-            .update({ status: newStatus })
-            .eq('id', userId);
-        if (!error) {
-            setUsers(prev => prev.map(u => u.id === userId ? { ...u, status: newStatus } : u));
-        }
+        setUsers(prev => prev.map(u => u.id === userId ? { ...u, role: newRole } : u));
     }, []);
 
     // Copy to clipboard
@@ -234,9 +221,8 @@ export default function AdminUsersPage() {
                                         value={inviteRole}
                                         onChange={e => setInviteRole(e.target.value)}
                                     >
-                                        <option value="member">Member — Xem và đề xuất chỉnh sửa</option>
-                                        <option value="editor">Editor — Chỉnh sửa trực tiếp</option>
-                                        <option value="archivist">Archivist — Quản lý tư liệu</option>
+                                        <option value="member">Member — Xem, đăng bài, đề xuất chỉnh sửa</option>
+                                        <option value="viewer">Viewer — Chỉ xem</option>
                                     </select>
                                 </div>
                                 <div className="space-y-2">
@@ -277,7 +263,6 @@ export default function AdminUsersPage() {
                                     <TableHead>Tên</TableHead>
                                     <TableHead>Email</TableHead>
                                     <TableHead>Quyền</TableHead>
-                                    <TableHead>Trạng thái</TableHead>
                                     <TableHead>Ngày tham gia</TableHead>
                                     <TableHead className="w-12"></TableHead>
                                 </TableRow>
@@ -292,11 +277,6 @@ export default function AdminUsersPage() {
                                                 {user.role.toUpperCase()}
                                             </Badge>
                                         </TableCell>
-                                        <TableCell>
-                                            <Badge variant={user.status === 'active' ? 'default' : 'destructive'}>
-                                                {user.status === 'active' ? 'Hoạt động' : 'Tạm ngưng'}
-                                            </Badge>
-                                        </TableCell>
                                         <TableCell>{new Date(user.created_at).toLocaleDateString('vi-VN')}</TableCell>
                                         <TableCell>
                                             <DropdownMenu>
@@ -309,18 +289,11 @@ export default function AdminUsersPage() {
                                                     <DropdownMenuItem onClick={() => handleChangeRole(user.id, 'admin')}>
                                                         Đặt Admin
                                                     </DropdownMenuItem>
-                                                    <DropdownMenuItem onClick={() => handleChangeRole(user.id, 'editor')}>
-                                                        Đặt Editor
-                                                    </DropdownMenuItem>
                                                     <DropdownMenuItem onClick={() => handleChangeRole(user.id, 'member')}>
                                                         Đặt Member
                                                     </DropdownMenuItem>
-                                                    <DropdownMenuSeparator />
-                                                    <DropdownMenuItem
-                                                        className={user.status === 'active' ? 'text-destructive' : 'text-green-600'}
-                                                        onClick={() => handleToggleStatus(user.id, user.status)}
-                                                    >
-                                                        {user.status === 'active' ? 'Tạm ngưng' : 'Kích hoạt lại'}
+                                                    <DropdownMenuItem onClick={() => handleChangeRole(user.id, 'viewer')}>
+                                                        Đặt Viewer (chỉ xem)
                                                     </DropdownMenuItem>
                                                 </DropdownMenuContent>
                                             </DropdownMenu>

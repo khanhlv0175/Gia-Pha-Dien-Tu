@@ -40,7 +40,7 @@ export default function PeopleListPage() {
             try {
                 const { supabase } = await import('@/lib/supabase');
                 const { data, error } = await supabase
-                    .from('people')
+                    .from('people_view')
                     .select('handle, display_name, gender, birth_year, death_year, is_living, is_privacy_filtered')
                     .order('display_name', { ascending: true });
                 if (!error && data) {

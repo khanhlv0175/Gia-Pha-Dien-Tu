@@ -21,7 +21,7 @@ interface MediaItem {
     state: string;
     uploader_id: string | null;
     created_at: string;
-    uploader?: { display_name: string | null; email: string };
+    uploader_name?: string | null;
 }
 
 const STATE_BADGE: Record<string, { variant: 'default' | 'secondary' | 'destructive'; label: string }> = {
@@ -31,7 +31,7 @@ const STATE_BADGE: Record<string, { variant: 'default' | 'secondary' | 'destruct
 };
 
 export default function MediaLibraryPage() {
-    const { user, isAdmin, isLoggedIn } = useAuth();
+    const { user, isAdmin, isMember } = useAuth();
     const [items, setItems] = useState<MediaItem[]>([]);
     const [loading, setLoading] = useState(true);
     const [tab, setTab] = useState('all');
@@ -40,7 +40,7 @@ export default function MediaLibraryPage() {
 
     const fetchMedia = useCallback(async (state?: string) => {
         setLoading(true);
-        let query = supabase.from('media').select('*, uploader:profiles(display_name, email)').order('created_at', { ascending: false });
+        let query = supabase.from('media').select('*').order('created_at', { ascending: false });
         if (state && state !== 'all') query = query.eq('state', state);
         const { data } = await query;
         if (data) setItems(data);
@@ -88,7 +88,7 @@ export default function MediaLibraryPage() {
                     <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2"><ImageIcon className="h-6 w-6" />Thư viện</h1>
                     <p className="text-muted-foreground">Quản lý hình ảnh và tài liệu</p>
                 </div>
-                {isLoggedIn && (
+                {isMember && (
                     <div>
                         <input ref={fileRef} type="file" className="hidden" onChange={handleUpload} />
                         <Button onClick={() => fileRef.current?.click()} disabled={uploading}>
@@ -128,7 +128,7 @@ export default function MediaLibraryPage() {
                                     </Badge>
                                 </div>
                                 <p className="text-xs text-muted-foreground">
-                                    {item.uploader?.display_name || item.uploader?.email?.split('@')[0] || 'Ẩn danh'} · {new Date(item.created_at).toLocaleDateString('vi-VN')}
+                                    {item.uploader_name || 'Ẩn danh'} · {new Date(item.created_at).toLocaleDateString('vi-VN')}
                                 </p>
                                 {isAdmin && item.state === 'PENDING' && (
                                     <div className="flex gap-2">

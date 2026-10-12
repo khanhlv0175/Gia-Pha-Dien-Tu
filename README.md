@@ -43,9 +43,16 @@
 - Lịch sự kiện, tin tức, hình ảnh dòng họ
 
 ### 🔐 Auth & 🛡️ Admin Panel
-- Đăng ký / Đăng nhập (Supabase Auth)
-- Phân quyền: **Admin** (toàn quyền) vs **Viewer** (chỉ xem)
-- Quản lý users, kiểm duyệt đóng góp, audit log, backup
+- Đăng nhập (Supabase Auth); **đăng ký chỉ bằng mã mời** do Admin tạo, kiểm tra ngay trong database
+- Phân quyền: **Admin** (toàn quyền) · **Member** (xem, đăng bài, bình luận, đề xuất chỉnh sửa) · **Viewer** (chỉ xem)
+- Quản lý users, kiểm duyệt đóng góp, audit log (do trigger ghi), backup
+
+### 🔒 Quyền riêng tư
+- Cây gia phả đọc qua view `people_view`, che dữ liệu theo vai trò:
+  - **Khách (chưa đăng nhập):** thấy tên + năm sinh người đang sống, không thấy ngày/nơi sinh và thông tin liên lạc; người đã mất hiển thị đầy đủ (trừ liên lạc)
+  - **Member/Viewer:** thấy cả thông tin liên lạc
+  - Người đánh dấu `is_privacy_filtered`: chỉ hiện tên + đời (trừ Admin)
+- SĐT, email, Zalo, địa chỉ, ghi chú nằm ở bảng riêng `people_private`
 
 ### 💬 Đóng Góp & Bình Luận
 - Thành viên đề xuất chỉnh sửa → Admin review & approve/reject
@@ -77,7 +84,10 @@ Gia-Pha-Dien-Tu/
     ├── .env.local.example        # ← Copy thành .env.local
     ├── package.json
     ├── supabase/
-    │   └── database-setup.sql    # Toàn bộ schema + dữ liệu mẫu
+    │   ├── migrations/           # Schema + RLS + trigger (0001…0005)
+    │   ├── seed.sql              # Dữ liệu mẫu demo
+    │   ├── database-setup.sql    # Sinh bởi `npm run db:bundle`
+    │   └── tests/                # Test RLS (PGlite)
     └── src/
         ├── app/
         │   ├── (auth)/           # Login, Register, Forgot Password
@@ -90,7 +100,6 @@ Gia-Pha-Dien-Tu/
         │   │   ├── media/        # 🖼️ Thư viện
         │   │   ├── people/       # 👥 Thành viên
         │   │   └── admin/        # 🛡️ Admin panel
-        │   └── api/
         ├── components/
         │   ├── auth-provider.tsx  # Auth context
         │   ├── layout/           # Sidebar + Header
@@ -116,7 +125,7 @@ Gia-Pha-Dien-Tu/
 ## 🚀 Cài đặt & chạy local
 
 ### Yêu cầu
-- **Node.js** ≥ 18
+- **Node.js** ≥ 24 (xem `frontend/.nvmrc`)
 - Tài khoản **Supabase** (free tier OK)
 
 ### Setup
@@ -150,44 +159,68 @@ Copy `frontend/.env.local.example` → `frontend/.env.local`:
 | `NEXT_PUBLIC_SUPABASE_URL` | Project URL | Supabase → Settings → API |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Anonymous key (public) | Supabase → Settings → API |
 | `SUPABASE_SERVICE_ROLE_KEY` | Service role key (⚠️ SECRET) | Supabase → Settings → API |
+| `NEXT_PUBLIC_DEMO_MODE` | `true` = chạy bằng dữ liệu mẫu, không cần Supabase (mặc định tắt) | — |
+
+> Thiếu cấu hình Supabase mà không bật `NEXT_PUBLIC_DEMO_MODE` thì app báo lỗi cấu hình rõ ràng, không hiển thị dữ liệu giả.
 
 ---
 
 ## 🗄 Database Setup
 
-Chỉ cần chạy **1 file duy nhất** trong **Supabase Dashboard → SQL Editor**:
+Schema nằm trong `frontend/supabase/migrations/` (theo thứ tự `0001` → `0005`). Để dán một lần vào **Supabase Dashboard → SQL Editor** (trên project **mới, trống**):
 
 ```
 frontend/supabase/database-setup.sql
 ```
 
-File này tạo tất cả:
+File này được sinh tự động từ migrations (+ dữ liệu mẫu `seed.sql`):
+
+```bash
+cd frontend
+npm run db:bundle                    # kèm dữ liệu mẫu demo
+npm run db:bundle -- --no-seed       # chỉ schema, dùng cho dữ liệu thật
+```
 
 | Bảng | Mô tả |
 |------|-------|
-| `people` | Thông tin thành viên (tên, đời, năm sinh/mất, liên lạc...) |
+| `people` | Thành viên (tên, đời, năm sinh/mất, trạng thái) |
+| `people_private` | Thông tin liên lạc / đời tư (chỉ đọc qua view `people_view`) |
 | `families` | Quan hệ gia đình (cha, mẹ, danh sách con) |
-| `profiles` | User profiles (role: admin/viewer) + auto-create trigger |
-| `contributions` | Đề xuất chỉnh sửa (pending → approved/rejected) |
-| `comments` | Bình luận trên profile |
+| `profiles` | Tài khoản + vai trò (`admin`/`member`/`viewer`), tạo bởi trigger khi đăng ký |
+| `invite_links` | Mã mời đăng ký (hết hạn sau 7 ngày, không cấp được admin) |
+| `contributions` | Đề xuất chỉnh sửa (pending → approved/rejected qua RPC `review_contribution`) |
+| `comments` / `post_comments` | Bình luận hồ sơ / bình luận bài viết |
+| `posts`, `events`, `event_rsvps`, `media` | Bảng tin, sự kiện, thư viện |
+| `notifications`, `audit_logs` | Do trigger sinh ra, client không ghi trực tiếp |
 
-Kèm theo **dữ liệu mẫu demo** (15 thành viên, 4 thế hệ) để test ngay.
+### Tạo Admin đầu tiên (một lần, thủ công)
 
-> ⚠️ Nhớ đổi email admin trong `database-setup.sql` (tìm `your-admin@example.com`).
+Không có đường nào trong ứng dụng để tự thành admin. Sau khi chạy SQL setup, trong SQL Editor:
 
-### ERD
-
-```mermaid
-erDiagram
-    people ||--o{ families : "father/mother"
-    people }o--o{ families : "children[]"
-    profiles ||--o{ contributions : "author"
-    profiles ||--o{ comments : "author"
-    people ||--o{ contributions : "target"
-    people ||--o{ comments : "target"
+```sql
+-- 1) Tạo mã mời để chính bạn đăng ký
+INSERT INTO invite_links (code, role, max_uses) VALUES ('MA-MOI-CUA-BAN', 'member', 1);
 ```
 
----
+Mở `/register`, đăng ký bằng mã đó. Sau đó:
+
+```sql
+-- 2) Nâng tài khoản vừa đăng ký lên admin
+UPDATE profiles SET role = 'admin' WHERE email = 'email-cua-ban@example.com';
+```
+
+Từ đó Admin tạo mã mời cho người khác và cấp quyền tại `/admin/users`.
+
+### Kiểm thử RLS
+
+Test bảo mật chạy trên Postgres nhúng (PGlite), không cần Docker hay Supabase:
+
+```bash
+cd frontend
+npm test
+```
+
+> PGlite dùng phần `auth` giả lập, nên vẫn nên thử vài kịch bản chính (đăng ký bằng mã mời, đổi role, khách đọc cây) trên project Supabase thật sau khi setup.
 
 ## 🌐 Deploy lên Vercel
 
@@ -202,7 +235,7 @@ erDiagram
 
 ### 1. Fork & Clone → npm install
 ### 2. Tạo Supabase project → chạy `database-setup.sql`
-### 3. Đổi email admin trong SQL
+### 3. Tạo admin đầu tiên (xem mục "Tạo Admin đầu tiên")
 ### 4. Cập nhật branding:
 
 | File | Thay đổi |

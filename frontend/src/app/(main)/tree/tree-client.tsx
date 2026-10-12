@@ -22,7 +22,7 @@ import {
     CARD_W, CARD_H,
     type TreeNode, type TreeFamily, type LayoutResult, type PositionedNode, type PositionedCouple, type Connection,
 } from '@/lib/tree-layout';
-import { getMockTreeData } from '@/lib/mock-data';
+import { loadTreeData } from '@/lib/tree-source';
 
 type ViewMode = 'full' | 'ancestor' | 'descendant';
 type ZoomLevel = 'full' | 'compact' | 'mini';
@@ -172,6 +172,8 @@ export default function TreeViewPage() {
 
     const [treeData, setTreeData] = useState<{ people: TreeNode[]; families: TreeFamily[] } | null>(null);
     const [loading, setLoading] = useState(true);
+    const [loadError, setLoadError] = useState<string | null>(null);
+    const [isDemo, setIsDemo] = useState(false);
     const [viewMode, setViewMode] = useState<ViewMode>('full');
     const [focusPerson, setFocusPerson] = useState<string | null>(null);
     const [searchQuery, setSearchQuery] = useState('');
@@ -190,7 +192,7 @@ export default function TreeViewPage() {
     // Editor mode state
     const [editorMode, setEditorMode] = useState(false);
     const [selectedCard, setSelectedCard] = useState<string | null>(null);
-    const { isAdmin } = useAuth();
+    const { isAdmin, isMember } = useAuth();
 
     // URL query param initialization + auto-collapse on initial load
     const urlInitialized = useRef(false);
@@ -269,37 +271,21 @@ export default function TreeViewPage() {
 
     // Fetch data
     useEffect(() => {
-        const fetchTree = async () => {
+        let cancelled = false;
+        (async () => {
             try {
-                const token = localStorage.getItem('accessToken');
-                const apiUrl = process.env.NEXT_PUBLIC_API_URL;
-                if (token && apiUrl) {
-                    const res = await fetch(`${apiUrl}/genealogy/tree`, {
-                        headers: { Authorization: `Bearer ${token}` },
-                        signal: AbortSignal.timeout(3000),
-                    });
-                    if (res.ok) {
-                        const json = await res.json();
-                        setTreeData(json.data);
-                        setLoading(false);
-                        return;
-                    }
-                }
-            } catch { /* fallback */ }
-            // Load from Supabase
-            try {
-                const data = await fetchTreeData();
-                if (data.people.length > 0) {
-                    setTreeData(data);
-                    setLoading(false);
-                    return;
-                }
-            } catch { /* fallback to mock */ }
-            // Fallback: use bundled mock data (demo mode)
-            setTreeData(getMockTreeData());
-            setLoading(false);
-        };
-        fetchTree();
+                const data = await loadTreeData();
+                if (cancelled) return;
+                setTreeData({ people: data.people, families: data.families });
+                setIsDemo(data.demo);
+            } catch (err) {
+                if (cancelled) return;
+                setLoadError(err instanceof Error ? err.message : 'Không tải được dữ liệu gia phả');
+            } finally {
+                if (!cancelled) setLoading(false);
+            }
+        })();
+        return () => { cancelled = true; };
     }, []);
 
     // Filtered data for view mode
@@ -768,6 +754,11 @@ export default function TreeViewPage() {
 
     return (
         <div className="flex flex-col h-[calc(100vh-80px)]">
+            {isDemo && (
+                <div className="mb-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-1.5 text-xs text-amber-800 dark:border-amber-700 dark:bg-amber-950/30 dark:text-amber-300">
+                    Chế độ demo — đây là dữ liệu mẫu, không phải dữ liệu thật của dòng họ.
+                </div>
+            )}
             {/* Header */}
             <div className="flex items-center justify-between flex-wrap gap-2 px-1 pb-2">
                 <div>
@@ -868,6 +859,11 @@ export default function TreeViewPage() {
                         <div className="flex items-center justify-center h-full">
                             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
                         </div>
+                    ) : loadError ? (
+                        <div className="flex flex-col items-center justify-center h-full gap-2 p-6 text-center">
+                            <p className="font-medium text-destructive">Không tải được cây gia phả</p>
+                            <p className="text-sm text-muted-foreground max-w-md">{loadError}</p>
+                        </div>
                     ) : layout && (
                         <div style={{
                             transform: `translate(${transform.x}px, ${transform.y}px) scale(${transform.scale})`,
@@ -934,7 +930,7 @@ export default function TreeViewPage() {
                                         onSetFocus={() => { panToPerson(person.handle); setContextMenu(null); }}
                                         onShowFull={() => { setViewMode('full'); setContextMenu(null); }}
                                         onCopyLink={() => { copyTreeLink(person.handle); setContextMenu(null); }}
-                                        onContribute={() => { setContributePerson({ handle: person.handle, name: person.displayName }); setContextMenu(null); }}
+                                        onContribute={isMember ? () => { setContributePerson({ handle: person.handle, name: person.displayName }); setContextMenu(null); } : undefined}
                                         onClose={() => setContextMenu(null)}
                                     />
                                 );
@@ -1036,8 +1032,12 @@ export default function TreeViewPage() {
                             supaUpdatePerson(handle, fields);
                         }}
                         onReset={async () => {
-                            const data = await fetchTreeData();
-                            setTreeData(data);
+                            try {
+                                const data = await fetchTreeData();
+                                setTreeData(data);
+                            } catch (err) {
+                                setLoadError(err instanceof Error ? err.message : 'Không tải lại được dữ liệu');
+                            }
                         }}
                         onClose={() => { setEditorMode(false); setSelectedCard(null); }}
                     />
@@ -1076,7 +1076,7 @@ function CardContextMenu({ person, x, y, onViewDetail, onShowDescendants, onShow
     onSetFocus: () => void;
     onShowFull: () => void;
     onCopyLink: () => void;
-    onContribute: () => void;
+    onContribute?: () => void;
     onClose: () => void;
 }) {
     return (
@@ -1113,7 +1113,9 @@ function CardContextMenu({ person, x, y, onViewDetail, onShowDescendants, onShow
                     <MenuAction icon={<Link className="w-4 h-4" />} label="Sao chép link hậu duệ" desc="Chia sẻ link cây con cháu" onClick={onCopyLink} />
                     <MenuAction icon={<Eye className="w-4 h-4" />} label="Toàn cảnh" desc="Hiển thị toàn bộ cây" onClick={onShowFull} />
                     <div className="border-t border-slate-100 my-1" />
-                    <MenuAction icon={<MessageSquarePlus className="w-4 h-4" />} label="Đóng góp thông tin" desc="Bổ sung thông tin về người này" onClick={onContribute} />
+                    {onContribute && (
+                        <MenuAction icon={<MessageSquarePlus className="w-4 h-4" />} label="Đóng góp thông tin" desc="Bổ sung thông tin về người này" onClick={onContribute} />
+                    )}
                 </div>
             </div>
         </div>

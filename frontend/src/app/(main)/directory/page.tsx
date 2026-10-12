@@ -11,11 +11,10 @@ import { supabase } from '@/lib/supabase';
 
 interface DirectoryMember {
     id: string;
-    email: string;
+    email: string | null; // chỉ admin mới nhận được email
     display_name: string | null;
     avatar_url: string | null;
     role: string;
-    status: string;
     created_at: string;
 }
 
@@ -28,12 +27,8 @@ export default function DirectoryPage() {
     const fetchMembers = useCallback(async () => {
         setLoading(true);
         try {
-            const { data } = await supabase
-                .from('profiles')
-                .select('*')
-                .eq('status', 'active')
-                .order('created_at', { ascending: true });
-            if (data) setMembers(data);
+            const { data } = await supabase.rpc('list_members');
+            if (data) setMembers(data as DirectoryMember[]);
         } catch { /* ignore */ }
         finally { setLoading(false); }
     }, []);
@@ -42,13 +37,13 @@ export default function DirectoryPage() {
 
     const filtered = members.filter(m =>
         (m.display_name || '').toLowerCase().includes(search.toLowerCase()) ||
-        m.email.toLowerCase().includes(search.toLowerCase())
+        (m.email || '').toLowerCase().includes(search.toLowerCase())
     );
 
     const getRoleBadge = (role: string) => {
         const colors: Record<string, string> = {
             admin: 'bg-red-100 text-red-800',
-            editor: 'bg-blue-100 text-blue-800',
+            viewer: 'bg-slate-100 text-slate-800',
             member: 'bg-green-100 text-green-800',
         };
         return <Badge variant="secondary" className={colors[role] || ''}>{role.toUpperCase()}</Badge>;
@@ -66,7 +61,7 @@ export default function DirectoryPage() {
 
             <div className="relative max-w-sm">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input placeholder="Tìm theo tên, email..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9" />
+                <Input placeholder="Tìm theo tên..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9" />
             </div>
 
             {loading ? (
@@ -90,8 +85,8 @@ export default function DirectoryPage() {
                                         <User className="h-5 w-5 text-primary" />
                                     </div>
                                     <div className="flex-1 min-w-0">
-                                        <p className="font-medium truncate">{m.display_name || m.email.split('@')[0]}</p>
-                                        <p className="text-xs text-muted-foreground truncate">{m.email}</p>
+                                        <p className="font-medium truncate">{m.display_name || m.email?.split('@')[0] || 'Thành viên'}</p>
+                                        {m.email && <p className="text-xs text-muted-foreground truncate">{m.email}</p>}
                                     </div>
                                     {getRoleBadge(m.role)}
                                 </div>

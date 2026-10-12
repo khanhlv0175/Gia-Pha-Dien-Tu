@@ -4,7 +4,7 @@ import { createContext, useContext, useEffect, useState, useCallback, type React
 import { supabase } from '@/lib/supabase';
 import type { User, Session } from '@supabase/supabase-js';
 
-export type UserRole = 'admin' | 'member' | null;
+export type UserRole = 'admin' | 'member' | 'viewer' | null;
 
 interface Profile {
     id: string;
@@ -22,10 +22,10 @@ interface AuthState {
     role: UserRole;
     loading: boolean;
     isAdmin: boolean;
+    /** member hoặc admin: được đăng bài, bình luận, đề xuất chỉnh sửa */
     isMember: boolean;
     isLoggedIn: boolean;
     signIn: (email: string, password: string) => Promise<{ error?: string }>;
-    signUp: (email: string, password: string, displayName?: string) => Promise<{ error?: string }>;
     signOut: () => Promise<void>;
     refreshProfile: () => Promise<void>;
 }
@@ -38,11 +38,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const [profile, setProfile] = useState<Profile | null>(null);
     const [loading, setLoading] = useState(true);
 
+    // Profile do trigger DB tạo khi đăng ký bằng mã mời; client chỉ đọc.
     const fetchProfile = useCallback(async (userId: string) => {
         try {
             const { data, error } = await supabase
                 .from('profiles')
-                .select('*')
+                .select('id, email, display_name, role, person_handle, avatar_url')
                 .eq('id', userId)
                 .maybeSingle();
             if (!error && data) {
@@ -55,30 +56,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
     }, []);
 
-    const ensureProfile = useCallback(async (u: User) => {
-        // Create profile if it doesn't exist (handles signup)
-        const { data: existing } = await supabase
-            .from('profiles')
-            .select('id')
-            .eq('id', u.id)
-            .maybeSingle();
-
-        if (!existing) {
-            await supabase.from('profiles').insert({
-                id: u.id,
-                email: u.email || '',
-                display_name: u.user_metadata?.display_name || u.email?.split('@')[0] || '',
-                role: 'member',
-            });
-        }
-        await fetchProfile(u.id);
-    }, [fetchProfile]);
-
     useEffect(() => {
         supabase.auth.getSession().then(({ data: { session: s } }) => {
             setSession(s);
             setUser(s?.user ?? null);
-            if (s?.user) ensureProfile(s.user);
+            if (s?.user) fetchProfile(s.user.id);
             setLoading(false);
         });
 
@@ -86,14 +68,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             setSession(s);
             setUser(s?.user ?? null);
             if (s?.user) {
-                ensureProfile(s.user);
+                fetchProfile(s.user.id);
             } else {
                 setProfile(null);
             }
         });
 
         return () => subscription.unsubscribe();
-    }, [ensureProfile]);
+    }, [fetchProfile]);
 
     const signIn = useCallback(async (email: string, password: string) => {
         const { error } = await supabase.auth.signInWithPassword({ email, password });
@@ -102,27 +84,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 return { error: 'Email hoặc mật khẩu không đúng' };
             }
             return { error: error.message };
-        }
-        return {};
-    }, []);
-
-    const signUp = useCallback(async (email: string, password: string, displayName?: string) => {
-        const { data, error } = await supabase.auth.signUp({
-            email,
-            password,
-            options: {
-                data: { display_name: displayName || email.split('@')[0] },
-            },
-        });
-        if (error) {
-            if (error.message.includes('already registered')) {
-                return { error: 'Email đã được đăng ký. Hãy đăng nhập.' };
-            }
-            return { error: error.message };
-        }
-        // If email confirmation is required
-        if (data.user && !data.session) {
-            return { error: 'Đã đăng ký! Kiểm tra email để xác nhận tài khoản.' };
         }
         return {};
     }, []);
@@ -144,7 +105,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             isAdmin: role === 'admin',
             isMember: role === 'member' || role === 'admin',
             isLoggedIn: !!user,
-            signIn, signUp, signOut, refreshProfile,
+            signIn, signOut, refreshProfile,
         }}>
             {children}
         </AuthContext.Provider>

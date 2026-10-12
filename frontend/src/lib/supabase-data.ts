@@ -1,6 +1,9 @@
 /**
- * Supabase data layer for the genealogy tree
- * Replaces localStorage-based persistence with Supabase PostgreSQL
+ * Supabase data layer for the genealogy tree.
+ *
+ * Đọc: luôn qua view `people_view` (đã che dữ liệu theo vai trò của người gọi).
+ * Ghi: chỉ admin ghi được `people` / `people_private` / `families` (RLS);
+ *      member đề xuất sửa qua bảng `contributions`.
  */
 import { supabase } from './supabase';
 import type { TreeNode, TreeFamily } from './tree-layout';
@@ -39,14 +42,14 @@ function dbRowToTreeFamily(row: Record<string, unknown>): TreeFamily {
 /** Fetch all people from Supabase */
 export async function fetchPeople(): Promise<TreeNode[]> {
     const { data, error } = await supabase
-        .from('people')
+        .from('people_view')
         .select('handle, display_name, gender, birth_year, death_year, generation, is_living, is_privacy_filtered, is_patrilineal, families, parent_families')
         .order('generation')
         .order('handle');
 
     if (error) {
-        console.error('Failed to fetch people:', error.message);
-        return [];
+        // Ném lỗi để UI phân biệt "không tải được" với "chưa có dữ liệu".
+        throw new Error(`Không tải được danh sách thành viên: ${error.message}`);
     }
     return (data || []).map(dbRowToTreeNode);
 }
@@ -59,8 +62,7 @@ export async function fetchFamilies(): Promise<TreeFamily[]> {
         .order('handle');
 
     if (error) {
-        console.error('Failed to fetch families:', error.message);
-        return [];
+        throw new Error(`Không tải được dữ liệu gia đình: ${error.message}`);
     }
     return (data || []).map(dbRowToTreeFamily);
 }
@@ -191,27 +193,32 @@ export async function updatePerson(
         notes?: string | null;
     }
 ): Promise<void> {
-    // Convert camelCase → snake_case for DB
-    const dbFields: Record<string, unknown> = {};
-    if (fields.displayName !== undefined) dbFields.display_name = fields.displayName;
-    if (fields.birthYear !== undefined) dbFields.birth_year = fields.birthYear;
-    if (fields.deathYear !== undefined) dbFields.death_year = fields.deathYear;
-    if (fields.isLiving !== undefined) dbFields.is_living = fields.isLiving;
-    if (fields.phone !== undefined) dbFields.phone = fields.phone;
-    if (fields.email !== undefined) dbFields.email = fields.email;
-    if (fields.currentAddress !== undefined) dbFields.current_address = fields.currentAddress;
-    if (fields.hometown !== undefined) dbFields.hometown = fields.hometown;
-    if (fields.occupation !== undefined) dbFields.occupation = fields.occupation;
-    if (fields.education !== undefined) dbFields.education = fields.education;
-    if (fields.notes !== undefined) dbFields.notes = fields.notes;
-    dbFields.updated_at = new Date().toISOString();
+    // Trường công khai nằm ở `people`, liên lạc/đời tư nằm ở `people_private`.
+    const publicFields: Record<string, unknown> = {};
+    if (fields.displayName !== undefined) publicFields.display_name = fields.displayName;
+    if (fields.birthYear !== undefined) publicFields.birth_year = fields.birthYear;
+    if (fields.deathYear !== undefined) publicFields.death_year = fields.deathYear;
+    if (fields.isLiving !== undefined) publicFields.is_living = fields.isLiving;
 
-    const { error } = await supabase
-        .from('people')
-        .update(dbFields)
-        .eq('handle', handle);
+    const privateFields: Record<string, unknown> = {};
+    if (fields.phone !== undefined) privateFields.phone = fields.phone;
+    if (fields.email !== undefined) privateFields.email = fields.email;
+    if (fields.currentAddress !== undefined) privateFields.current_address = fields.currentAddress;
+    if (fields.hometown !== undefined) privateFields.hometown = fields.hometown;
+    if (fields.occupation !== undefined) privateFields.occupation = fields.occupation;
+    if (fields.education !== undefined) privateFields.education = fields.education;
+    if (fields.notes !== undefined) privateFields.notes = fields.notes;
 
-    if (error) console.error('Failed to update person:', error.message);
+    if (Object.keys(publicFields).length > 0) {
+        const { error } = await supabase.from('people').update(publicFields).eq('handle', handle);
+        if (error) console.error('Failed to update person:', error.message);
+    }
+    if (Object.keys(privateFields).length > 0) {
+        const { error } = await supabase
+            .from('people_private')
+            .upsert({ handle, ...privateFields }, { onConflict: 'handle' });
+        if (error) console.error('Failed to update person contact info:', error.message);
+    }
 }
 
 /** Add a new person to the tree */

@@ -40,7 +40,7 @@ interface EventItem {
     is_recurring: boolean;
     creator_id: string;
     created_at: string;
-    creator?: { display_name: string | null; email: string };
+    creator_name?: string | null;
     rsvp_count?: number;
 }
 
@@ -146,7 +146,7 @@ function EventCard({ event }: { event: EventItem }) {
 }
 
 export default function EventsPage() {
-    const { isLoggedIn } = useAuth();
+    const { isAdmin } = useAuth();
     const [events, setEvents] = useState<EventItem[]>([]);
     const [loading, setLoading] = useState(true);
 
@@ -155,7 +155,7 @@ export default function EventsPage() {
         try {
             const { data } = await supabase
                 .from('events')
-                .select('*, creator:profiles(display_name, email)')
+                .select('*')
                 .order('start_at', { ascending: false });
             if (data) setEvents(data);
         } catch { /* ignore */ }
@@ -174,7 +174,7 @@ export default function EventsPage() {
                     </h1>
                     <p className="text-muted-foreground">Lịch các hoạt động dòng họ</p>
                 </div>
-                {isLoggedIn && <CreateEventDialog onCreated={fetchEvents} />}
+                {isAdmin && <CreateEventDialog onCreated={fetchEvents} />}
             </div>
 
             {loading ? (

@@ -19,12 +19,14 @@ export default function BackupPage() {
         try {
             // Export all data from Supabase
             const { data: people } = await supabase.from('people').select('*');
+            const { data: peoplePrivate } = await supabase.from('people_private').select('*');
             const { data: families } = await supabase.from('families').select('*');
             const { data: profiles } = await supabase.from('profiles').select('*');
 
             const backup = {
                 exported_at: new Date().toISOString(),
                 people: people || [],
+                people_private: peoplePrivate || [],
                 families: families || [],
                 profiles: profiles || [],
             };
@@ -82,7 +84,7 @@ function DatabaseStats() {
 
     useEffect(() => {
         async function load() {
-            const tables = ['people', 'families', 'profiles', 'posts', 'comments', 'events', 'notifications'];
+            const tables = ['people', 'people_private', 'families', 'profiles', 'posts', 'post_comments', 'comments', 'events', 'media'];
             const counts: Record<string, number> = {};
             for (const t of tables) {
                 const { count } = await supabase.from(t).select('*', { count: 'exact', head: true });

@@ -17,8 +17,9 @@ export default function MemberDetailPage() {
     const fetchMember = useCallback(async () => {
         if (!params.id) return;
         setLoading(true);
-        const { data } = await supabase.from('profiles').select('*').eq('id', params.id).single();
-        if (data) setMember(data);
+        const { data } = await supabase.rpc('list_members');
+        const found = (data as Record<string, unknown>[] | null)?.find(m => m.id === params.id);
+        if (found) setMember(found);
         setLoading(false);
     }, [params.id]);
 
@@ -37,10 +38,10 @@ export default function MemberDetailPage() {
                     <div className="h-20 w-20 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-2">
                         <User className="h-10 w-10 text-primary" />
                     </div>
-                    <CardTitle>{(member.display_name as string) || (member.email as string)?.split('@')[0]}</CardTitle>
+                    <CardTitle>{(member.display_name as string) || (member.email as string | null)?.split('@')[0] || 'Thành viên'}</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-3">
-                    <div className="flex items-center gap-2 text-sm"><Mail className="h-4 w-4" />{member.email as string}</div>
+                    {!!member.email && <div className="flex items-center gap-2 text-sm"><Mail className="h-4 w-4" />{member.email as string}</div>}
                     <div className="flex items-center gap-2 text-sm"><Shield className="h-4 w-4" /><Badge variant="secondary">{(member.role as string)?.toUpperCase()}</Badge></div>
                     <div className="flex items-center gap-2 text-sm"><Calendar className="h-4 w-4" />Tham gia: {new Date(member.created_at as string).toLocaleDateString('vi-VN')}</div>
                 </CardContent>

@@ -32,7 +32,7 @@ interface Post {
     status: string;
     created_at: string;
     updated_at: string;
-    author?: { email: string; display_name: string | null; role: string };
+    author_name?: string | null;
     comment_count?: number;
 }
 
@@ -42,13 +42,13 @@ interface Comment {
     body: string;
     parent_id: string | null;
     created_at: string;
-    author?: { email: string; display_name: string | null };
+    author_name?: string | null;
 }
 
 // === Post Composer ===
 
 function PostComposer({ onPostCreated }: { onPostCreated: () => void }) {
-    const { user, isLoggedIn } = useAuth();
+    const { user, isMember } = useAuth();
     const [body, setBody] = useState('');
     const [title, setTitle] = useState('');
     const [submitting, setSubmitting] = useState(false);
@@ -75,7 +75,7 @@ function PostComposer({ onPostCreated }: { onPostCreated: () => void }) {
         }
     };
 
-    if (!isLoggedIn) return null;
+    if (!isMember) return null;
 
     return (
         <Card>
@@ -113,7 +113,7 @@ function PostComposer({ onPostCreated }: { onPostCreated: () => void }) {
 // === Comment Section ===
 
 function CommentSection({ postId }: { postId: string }) {
-    const { user, isLoggedIn } = useAuth();
+    const { user, isMember } = useAuth();
     const [comments, setComments] = useState<Comment[]>([]);
     const [newComment, setNewComment] = useState('');
     const [loading, setLoading] = useState(true);
@@ -121,8 +121,8 @@ function CommentSection({ postId }: { postId: string }) {
     const fetchComments = useCallback(async () => {
         setLoading(true);
         const { data } = await supabase
-            .from('comments')
-            .select('*, author:profiles(email, display_name)')
+            .from('post_comments')
+            .select('*')
             .eq('post_id', postId)
             .order('created_at', { ascending: true });
         if (data) setComments(data);
@@ -133,7 +133,7 @@ function CommentSection({ postId }: { postId: string }) {
 
     const handleSubmit = async () => {
         if (!newComment.trim() || !user) return;
-        const { error } = await supabase.from('comments').insert({
+        const { error } = await supabase.from('post_comments').insert({
             post_id: postId,
             author_id: user.id,
             body: newComment.trim(),
@@ -155,7 +155,7 @@ function CommentSection({ postId }: { postId: string }) {
                             <User className="h-3 w-3 text-muted-foreground" />
                         </div>
                         <div className="flex-1">
-                            <p className="text-xs font-medium">{c.author?.display_name || c.author?.email?.split('@')[0]}</p>
+                            <p className="text-xs font-medium">{c.author_name || 'Ẩn danh'}</p>
                             <p className="text-sm">{c.body}</p>
                             <span className="text-xs text-muted-foreground">
                                 {new Date(c.created_at).toLocaleDateString('vi-VN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
@@ -164,7 +164,7 @@ function CommentSection({ postId }: { postId: string }) {
                     </div>
                 ))
             )}
-            {isLoggedIn && (
+            {isMember && (
                 <div className="flex gap-2">
                     <Input
                         placeholder="Viết bình luận..."
@@ -207,7 +207,7 @@ function PostCard({ post, onRefresh }: { post: Post; onRefresh: () => void }) {
                             <User className="h-4 w-4 text-primary" />
                         </div>
                         <div>
-                            <p className="font-medium text-sm">{post.author?.display_name || post.author?.email?.split('@')[0] || 'Ẩn danh'}</p>
+                            <p className="font-medium text-sm">{post.author_name || 'Ẩn danh'}</p>
                             <div className="flex items-center gap-1 text-xs text-muted-foreground">
                                 <Calendar className="h-3 w-3" />
                                 {new Date(post.created_at).toLocaleDateString('vi-VN', { day: 'numeric', month: 'short', year: 'numeric' })}
@@ -254,7 +254,7 @@ export default function FeedPage() {
         try {
             const { data } = await supabase
                 .from('posts')
-                .select('*, author:profiles(email, display_name, role)')
+                .select('*')
                 .eq('status', 'published')
                 .order('is_pinned', { ascending: false })
                 .order('created_at', { ascending: false });
@@ -264,7 +264,7 @@ export default function FeedPage() {
                 const postIds = data.map((p: Post) => p.id);
                 if (postIds.length > 0) {
                     const { data: counts } = await supabase
-                        .from('comments')
+                        .from('post_comments')
                         .select('post_id')
                         .in('post_id', postIds);
                     const countMap: Record<string, number> = {};

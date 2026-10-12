@@ -27,7 +27,7 @@ interface Contribution {
 }
 
 export default function AdminEditsPage() {
-    const { isAdmin, loading: authLoading, user } = useAuth();
+    const { isAdmin, loading: authLoading } = useAuth();
     const router = useRouter();
     const [contributions, setContributions] = useState<Contribution[]>([]);
     const [loading, setLoading] = useState(true);
@@ -54,13 +54,17 @@ export default function AdminEditsPage() {
 
     const handleAction = async (id: string, action: 'approved' | 'rejected') => {
         setProcessingId(id);
-        await supabase.from('contributions').update({
-            status: action,
-            admin_note: adminNotes[id] || null,
-            reviewed_by: user?.id,
-            reviewed_at: new Date().toISOString(),
-        }).eq('id', id);
+        // Áp dụng thay đổi + đổi trạng thái trong một transaction phía DB.
+        const { error } = await supabase.rpc('review_contribution', {
+            p_id: id,
+            p_approve: action === 'approved',
+            p_note: adminNotes[id] || null,
+        });
         setProcessingId(null);
+        if (error) {
+            window.alert(`Không xử lý được đóng góp: ${error.message}`);
+            return;
+        }
         fetchContributions();
     };
 

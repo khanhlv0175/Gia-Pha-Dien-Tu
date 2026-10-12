@@ -413,7 +413,7 @@ describe('thông báo và audit log', () => {
         });
         expect(out[0].changed_fields).toEqual(['phone']);
         expect(out[0].actor_id).toBe(admin);
-        const cols = await db.query(`SELECT column_name FROM information_schema.columns WHERE table_name = 'audit_logs'`);
+        const cols = await db.query<{ column_name: string }>(`SELECT column_name FROM information_schema.columns WHERE table_name = 'audit_logs'`);
         expect(cols.rows.map(r => r.column_name)).not.toContain('old_value');
     });
 });

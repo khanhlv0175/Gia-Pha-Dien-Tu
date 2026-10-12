@@ -20,7 +20,7 @@ interface CommentSectionProps {
 }
 
 export function CommentSection({ personHandle }: CommentSectionProps) {
-    const { user, profile, isAdmin, isLoggedIn } = useAuth();
+    const { user, profile, isAdmin, isMember, isLoggedIn } = useAuth();
     const [comments, setComments] = useState<Comment[]>([]);
     const [loading, setLoading] = useState(true);
     const [content, setContent] = useState('');
@@ -115,7 +115,7 @@ export function CommentSection({ personHandle }: CommentSectionProps) {
             )}
 
             {/* Comment input */}
-            {isLoggedIn ? (
+            {isMember ? (
                 <div className="flex gap-2 pt-2 border-t">
                     <textarea
                         value={content}
@@ -128,6 +128,10 @@ export function CommentSection({ personHandle }: CommentSectionProps) {
                     <Button size="sm" disabled={!content.trim() || sending} onClick={handleSubmit} className="self-end">
                         <Send className="w-4 h-4" />
                     </Button>
+                </div>
+            ) : isLoggedIn ? (
+                <div className="text-center py-3 border-t text-xs text-muted-foreground">
+                    Tài khoản chỉ xem không thể bình luận
                 </div>
             ) : (
                 <div className="text-center py-3 border-t text-xs text-muted-foreground">

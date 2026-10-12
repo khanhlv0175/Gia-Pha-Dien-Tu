@@ -16,6 +16,7 @@ const registerSchema = z.object({
     displayName: z.string().min(2, 'Tên tối thiểu 2 ký tự').max(100),
     password: z.string().min(8, 'Mật khẩu tối thiểu 8 ký tự'),
     confirmPassword: z.string(),
+    inviteCode: z.string().min(6, 'Bạn cần có mã mời từ quản trị viên'),
 }).refine((data) => data.password === data.confirmPassword, {
     message: 'Mật khẩu xác nhận không khớp',
     path: ['confirmPassword'],
@@ -29,77 +30,55 @@ function RegisterContent() {
     const inviteCode = searchParams.get('code') || '';
     const [showPassword, setShowPassword] = useState(false);
     const [error, setError] = useState('');
+    const [notice, setNotice] = useState('');
     const [loading, setLoading] = useState(false);
 
     const {
         register,
         handleSubmit,
         formState: { errors },
-    } = useForm<RegisterForm>({ resolver: zodResolver(registerSchema) });
+    } = useForm<RegisterForm>({
+        resolver: zodResolver(registerSchema),
+        defaultValues: { inviteCode },
+    });
 
     const onSubmit = async (data: RegisterForm) => {
-        if (!inviteCode) {
-            setError('Bạn cần có mã mời để đăng ký');
-            return;
-        }
-
+        const code = data.inviteCode.trim();
         try {
             setError('');
             setLoading(true);
 
-            // Validate invite code against Supabase
-            const { data: invite, error: inviteErr } = await supabase
-                .from('invite_links')
-                .select('*')
-                .eq('code', inviteCode)
-                .single();
-
-            if (inviteErr || !invite) {
-                setError('Mã mời không hợp lệ hoặc đã hết hạn');
+            // Kiểm tra sớm để báo lỗi dễ hiểu; việc thực thi thật nằm ở trigger DB.
+            const { data: valid, error: rpcErr } = await supabase.rpc('validate_invite_code', { p_code: code });
+            if (rpcErr || !valid) {
+                setError('Mã mời không hợp lệ, đã hết hạn hoặc đã hết lượt sử dụng');
                 return;
             }
 
-            if (invite.max_uses && invite.used_count >= invite.max_uses) {
-                setError('Mã mời đã hết lượt sử dụng');
-                return;
-            }
-
-            // Sign up via Supabase Auth
+            // Vai trò và lượt dùng do DB xử lý trong trigger khi tạo tài khoản.
             const { data: authData, error: authErr } = await supabase.auth.signUp({
                 email: data.email,
                 password: data.password,
                 options: {
-                    data: {
-                        display_name: data.displayName,
-                        invite_code: inviteCode,
-                    },
+                    data: { display_name: data.displayName, invite_code: code },
                 },
             });
 
             if (authErr) {
-                setError(authErr.message);
+                setError(
+                    /database error|invite/i.test(authErr.message)
+                        ? 'Mã mời không hợp lệ, đã hết hạn hoặc đã hết lượt sử dụng'
+                        : authErr.message,
+                );
                 return;
             }
 
-            // Increment invite used_count
-            await supabase
-                .from('invite_links')
-                .update({ used_count: (invite.used_count || 0) + 1 })
-                .eq('id', invite.id);
-
-            // Create profile
-            if (authData.user) {
-                await supabase.from('profiles').upsert({
-                    id: authData.user.id,
-                    email: data.email,
-                    display_name: data.displayName,
-                    role: invite.role || 'member',
-                    status: 'active',
-                });
+            if (authData.session) {
+                router.push('/');
+            } else {
+                setNotice('Đã đăng ký! Kiểm tra email để xác nhận tài khoản, sau đó đăng nhập.');
             }
-
-            router.push('/');
-        } catch (err: unknown) {
+        } catch {
             setError('Đăng ký thất bại. Vui lòng thử lại.');
         } finally {
             setLoading(false);
@@ -119,11 +98,15 @@ function RegisterContent() {
             </CardHeader>
             <CardContent>
                 <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-                    {!inviteCode && (
-                        <div className="rounded-md bg-amber-500/10 p-3 text-sm text-amber-600 dark:text-amber-400">
-                            ⚠️ Bạn cần có mã mời từ Admin để đăng ký
-                        </div>
+                    {notice && (
+                        <div className="rounded-md bg-green-50 dark:bg-green-950/30 p-3 text-sm text-green-700 dark:text-green-400">{notice}</div>
                     )}
+
+                    <div className="space-y-2">
+                        <label className="text-sm font-medium" htmlFor="inviteCode">Mã mời</label>
+                        <Input id="inviteCode" placeholder="Mã do quản trị viên cung cấp" {...register('inviteCode')} />
+                        {errors.inviteCode && <p className="text-xs text-destructive">{errors.inviteCode.message}</p>}
+                    </div>
 
                     {error && (
                         <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">{error}</div>
@@ -172,7 +155,7 @@ function RegisterContent() {
                         {errors.confirmPassword && <p className="text-xs text-destructive">{errors.confirmPassword.message}</p>}
                     </div>
 
-                    <Button type="submit" className="w-full" disabled={loading || !inviteCode}>
+                    <Button type="submit" className="w-full" disabled={loading}>
                         {loading ? 'Đang đăng ký...' : 'Đăng ký'}
                     </Button>
                 </form>

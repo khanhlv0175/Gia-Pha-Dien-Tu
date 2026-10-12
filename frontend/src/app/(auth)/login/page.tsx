@@ -1,8 +1,9 @@
 'use client';
 
 import { useState } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { TreePine, Eye, EyeOff, UserPlus, LogIn } from 'lucide-react';
+import { TreePine, Eye, EyeOff, LogIn } from 'lucide-react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -14,19 +15,16 @@ import { useAuth } from '@/components/auth-provider';
 const loginSchema = z.object({
     email: z.string().email('Email không hợp lệ'),
     password: z.string().min(6, 'Mật khẩu tối thiểu 6 ký tự'),
-    displayName: z.string().optional(),
 });
 
 type LoginForm = z.infer<typeof loginSchema>;
 
 export default function LoginPage() {
     const router = useRouter();
-    const { signIn, signUp } = useAuth();
+    const { signIn } = useAuth();
     const [showPassword, setShowPassword] = useState(false);
     const [error, setError] = useState('');
-    const [success, setSuccess] = useState('');
     const [loading, setLoading] = useState(false);
-    const [mode, setMode] = useState<'login' | 'register'>('login');
 
     const {
         register,
@@ -36,28 +34,14 @@ export default function LoginPage() {
 
     const onSubmit = async (data: LoginForm) => {
         setError('');
-        setSuccess('');
         setLoading(true);
 
         try {
-            if (mode === 'register') {
-                const result = await signUp(data.email, data.password, data.displayName);
-                if (result.error) {
-                    if (result.error.includes('Đã đăng ký') || result.error.includes('Kiểm tra email')) {
-                        setSuccess(result.error);
-                    } else {
-                        setError(result.error);
-                    }
-                } else {
-                    router.push('/tree');
-                }
+            const result = await signIn(data.email, data.password);
+            if (result.error) {
+                setError(result.error);
             } else {
-                const result = await signIn(data.email, data.password);
-                if (result.error) {
-                    setError(result.error);
-                } else {
-                    router.push('/tree');
-                }
+                router.push('/tree');
             }
         } finally {
             setLoading(false);
@@ -74,10 +58,7 @@ export default function LoginPage() {
                 </div>
                 <CardTitle className="text-2xl font-bold">Gia phả họ Lê</CardTitle>
                 <CardDescription>
-                    {mode === 'login'
-                        ? 'Đăng nhập để quản lý & đóng góp thông tin'
-                        : 'Đăng ký tài khoản thành viên dòng họ'
-                    }
+                    Đăng nhập để quản lý & đóng góp thông tin
                 </CardDescription>
             </CardHeader>
             <CardContent>
@@ -85,17 +66,6 @@ export default function LoginPage() {
                     {error && (
                         <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">{error}</div>
                     )}
-                    {success && (
-                        <div className="rounded-md bg-green-50 dark:bg-green-950/30 p-3 text-sm text-green-700 dark:text-green-400">{success}</div>
-                    )}
-
-                    {mode === 'register' && (
-                        <div className="space-y-2">
-                            <label className="text-sm font-medium" htmlFor="displayName">Họ tên</label>
-                            <Input id="displayName" placeholder="Nguyễn Văn A" {...register('displayName')} />
-                        </div>
-                    )}
-
                     <div className="space-y-2">
                         <label className="text-sm font-medium" htmlFor="email">Email</label>
                         <Input id="email" type="email" placeholder="email@example.com" {...register('email')} />
@@ -123,29 +93,13 @@ export default function LoginPage() {
                     </div>
 
                     <Button type="submit" className="w-full" disabled={loading}>
-                        {mode === 'login' ? (
-                            <>{loading ? 'Đang đăng nhập...' : <><LogIn className="h-4 w-4 mr-2" /> Đăng nhập</>}</>
-                        ) : (
-                            <>{loading ? 'Đang đăng ký...' : <><UserPlus className="h-4 w-4 mr-2" /> Đăng ký</>}</>
-                        )}
+                        {loading ? 'Đang đăng nhập...' : <><LogIn className="h-4 w-4 mr-2" /> Đăng nhập</>}
                     </Button>
 
-                    <div className="relative my-2">
-                        <div className="absolute inset-0 flex items-center"><div className="w-full border-t" /></div>
-                        <div className="relative flex justify-center text-xs uppercase"><span className="bg-card px-2 text-muted-foreground">hoặc</span></div>
-                    </div>
-
-                    <Button
-                        type="button"
-                        variant="outline"
-                        className="w-full"
-                        onClick={() => { setMode(m => m === 'login' ? 'register' : 'login'); setError(''); setSuccess(''); }}
-                    >
-                        {mode === 'login'
-                            ? <><UserPlus className="h-4 w-4 mr-2" /> Tạo tài khoản mới</>
-                            : <><LogIn className="h-4 w-4 mr-2" /> Đăng nhập</>
-                        }
-                    </Button>
+                    <p className="text-center text-xs text-muted-foreground">
+                        Chưa có tài khoản? Đăng ký cần mã mời từ quản trị viên —{' '}
+                        <Link href="/register" className="underline">nhập mã mời</Link>
+                    </p>
                 </form>
             </CardContent>
         </Card>

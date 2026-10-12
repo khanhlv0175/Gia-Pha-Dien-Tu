@@ -3,7 +3,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { Printer, ArrowLeft, BookOpen, Eye, Palette, Check } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { fetchTreeData } from '@/lib/supabase-data';
+import { loadTreeData } from '@/lib/tree-source';
 import { generateBookData, type BookData, type BookPerson, type BookChapter } from '@/lib/book-generator';
 import type { TreeNode, TreeFamily } from '@/lib/tree-layout';
 import Link from 'next/link';
@@ -53,6 +53,7 @@ type ThemeKey = keyof typeof THEMES;
 export default function BookPage() {
     const [bookData, setBookData] = useState<BookData | null>(null);
     const [loading, setLoading] = useState(true);
+    const [loadError, setLoadError] = useState<string | null>(null);
     const [previewMode, setPreviewMode] = useState(false);
     const [theme, setTheme] = useState<ThemeKey>('amber');
     const [showThemePicker, setShowThemePicker] = useState(false);
@@ -72,18 +73,13 @@ export default function BookPage() {
             let people: TreeNode[] = [];
             let families: TreeFamily[] = [];
             try {
-                const treeData = await fetchTreeData();
-                if (treeData.people.length > 0) {
-                    people = treeData.people;
-                    families = treeData.families;
-                }
-            } catch { /* fallback */ }
-            // Fallback: use mock data when Supabase is not configured
-            if (people.length === 0) {
-                const { getMockTreeData } = await import('@/lib/mock-data');
-                const mock = getMockTreeData();
-                people = mock.people;
-                families = mock.families;
+                const treeData = await loadTreeData();
+                people = treeData.people;
+                families = treeData.families;
+            } catch (err) {
+                setLoadError(err instanceof Error ? err.message : 'Không tải được dữ liệu gia phả');
+                setLoading(false);
+                return;
             }
             const familyName = people.length > 0 ? (people[0].displayName?.split(' ').slice(0, 2).join(' ') || 'Dòng Họ') : 'Dòng Họ';
             const data = generateBookData(people, families, familyName);
@@ -100,6 +96,14 @@ export default function BookPage() {
                     <BookOpen className="w-5 h-5" />
                     <span>Đang tạo sách gia phả...</span>
                 </div>
+            </div>
+        );
+    }
+    if (loadError) {
+        return (
+            <div className="flex flex-col items-center justify-center min-h-screen gap-2 p-6 text-center">
+                <p className="font-medium text-destructive">Không tạo được sách gia phả</p>
+                <p className="text-sm text-muted-foreground max-w-md">{loadError}</p>
             </div>
         );
     }

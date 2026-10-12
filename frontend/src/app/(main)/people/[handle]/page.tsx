@@ -26,7 +26,7 @@ export default function PersonProfilePage() {
             try {
                 const { supabase } = await import('@/lib/supabase');
                 const { data, error } = await supabase
-                    .from('people')
+                    .from('people_view')
                     .select('*')
                     .eq('handle', handle)
                     .single();

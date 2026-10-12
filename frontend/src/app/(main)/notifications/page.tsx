@@ -20,7 +20,7 @@ interface NotificationItem {
 }
 
 const typeIcons: Record<string, string> = {
-    NEW_POST: '📝', NEW_COMMENT: '💬', EVENT_REMINDER: '🔔', RSVP_UPDATE: '✅', SYSTEM: '⚙️',
+    NEW_POST: '📝', NEW_COMMENT: '💬', EVENT_REMINDER: '🔔', RSVP_UPDATE: '✅', SYSTEM: '⚙️', NEW_EVENT: '📅',
 };
 
 export default function NotificationsPage() {

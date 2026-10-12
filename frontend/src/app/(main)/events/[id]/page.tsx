@@ -25,7 +25,7 @@ const rsvpOptions = [
 export default function EventDetailPage() {
     const params = useParams();
     const router = useRouter();
-    const { user, isLoggedIn } = useAuth();
+    const { user, isMember } = useAuth();
     const [event, setEvent] = useState<Record<string, unknown> | null>(null);
     const [rsvps, setRsvps] = useState<Record<string, unknown>[]>([]);
     const [myRsvp, setMyRsvp] = useState<string | null>(null);
@@ -37,7 +37,7 @@ export default function EventDetailPage() {
         try {
             const { data } = await supabase
                 .from('events')
-                .select('*, creator:profiles(display_name, email)')
+                .select('*')
                 .eq('id', params.id)
                 .single();
             if (data) setEvent(data);
@@ -45,7 +45,7 @@ export default function EventDetailPage() {
             // Fetch RSVPs
             const { data: rsvpData } = await supabase
                 .from('event_rsvps')
-                .select('*, user:profiles(display_name, email)')
+                .select('*')
                 .eq('event_id', params.id);
             if (rsvpData) {
                 setRsvps(rsvpData);
@@ -95,7 +95,7 @@ export default function EventDetailPage() {
                         <div className="flex items-center gap-2"><Users className="h-4 w-4" />{rsvps.filter((r: Record<string, unknown>) => r.status === 'GOING').length} người tham dự</div>
                     </div>
 
-                    {isLoggedIn && (
+                    {isMember && (
                         <div className="flex gap-2 pt-4 border-t">
                             {rsvpOptions.map(opt => (
                                 <Button
@@ -119,7 +119,7 @@ export default function EventDetailPage() {
                         <div className="space-y-2">
                             {rsvps.map((r: Record<string, unknown>) => (
                                 <div key={r.id as string} className="flex items-center justify-between text-sm">
-                                    <span>{(r.user as Record<string, unknown>)?.display_name as string || ((r.user as Record<string, unknown>)?.email as string)?.split('@')[0]}</span>
+                                    <span>{(r.user_name as string) || 'Thành viên'}</span>
                                     <Badge variant="secondary">{r.status as string}</Badge>
                                 </div>
                             ))}
